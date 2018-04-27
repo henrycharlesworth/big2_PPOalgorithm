@@ -13,41 +13,42 @@ class PPONetwork(object):
         
         with tf.variable_scope(name):
             X = tf.placeholder(tf.float32, [None, obs_dim], name="input")
+            available_moves = tf.placeholder(tf.float32, [None, act_dim], name="availableActions")
+            #available_moves takes form [0, 0, -inf, 0, -inf...], 0 if action is available, -inf if not.
             activation = tf.nn.relu
             h1 = activation(fc(X,'fc1', nh=512, init_scale=np.sqrt(2)))
             h2 = activation(fc(h1,'fc2', nh=256, init_scale=np.sqrt(2)))
-            mean = fc(h2,'mean', act_dim, init_scale=np.sqrt(2), init_bias = 6.5)
-            logstd = fc(h2,'logstd', act_dim, init_scale=np.sqrt(2), init_bias= 1.15)
-            std = tf.exp(logstd)
+            pi = fc(h2,'pi', act_dim, init_scale = 0.01)
             #value function - share layer h1
             h3 = activation(fc(h1,'fc3', nh=256, init_scale=np.sqrt(2)))
             vf = fc(h3, 'vf', 1)[:,0]
-            
-        def sample():
-            return mean + std * tf.random_normal(tf.shape(mean))
+        availPi = tf.add(pi, available_moves)    
         
-        def neglogpacfunc(x):
-            return 0.5*tf.reduce_sum(tf.square((x-mean) / std), axis=-1) + 0.5*np.log(2.0*np.pi)*tf.to_float(tf.shape(x)[-1]) + tf.reduce_sum(logstd, axis=-1)
+        def sample():
+            u = tf.random_uniform(tf.shape(availPi))
+            return tf.argmax(availPi - tf.log(-tf.log(u)), axis=-1)
         
         a0 = sample()
-        neglogpac = neglogpacfunc(a0)
+        el0in = tf.exp(availPi - tf.reduce_max(availPi, axis=-1, keep_dims=True))
+        z0in = tf.reduce_sum(el0in, axis=-1, keep_dims = True)
+        p0in = el0in / z0in
+        onehot = tf.one_hot(a0, availPi.get_shape().as_list()[-1])
+        neglogpac = -tf.log(tf.reduce_sum(tf.multiply(p0in, onehot), axis=-1))
         
-        def step(obs):
-            a, v, neglogp = sess.run([a0, vf, neglogpac], {X:obs})
+        def step(obs, availAcs):
+            a, v, neglogp = sess.run([a0, vf, neglogpac], {X:obs, available_moves:availAcs})
             return a, v, neglogp
             
-        def value(obs):
-            return sess.run(vf, {X:obs})
+        def value(obs, availAcs):
+            return sess.run(vf, {X:obs, available_moves:availAcs})
         
-        self.vf = vf
-        self.neglogpac = neglogpacfunc
         self.X = X
-        self.mean = mean
-        self.logstd = logstd
-        self.std = std
+        self.available_moves = available_moves
+        self.pi = pi
+        self.availPi = availPi
+        self.vf = vf        
         self.step = step
         self.value = value
-        
         self.params = tf.get_collection(tf.GraphKeys.TRAINABLE_VARIABLES, scope=self.name)
         
         def getParams():
@@ -78,7 +79,7 @@ class PPOModel(object):
         self.network = network
         
         #placeholder variables
-        ACTIONS = tf.placeholder(tf.float32, [None, actDim], name='actionsPlaceholder')
+        ACTIONS = tf.placeholder(tf.int32, [None], name='actionsPlaceholder')
         ADVANTAGES = tf.placeholder(tf.float32, [None], name='advantagesPlaceholder')
         RETURNS = tf.placeholder(tf.float32, [None], name='returnsPlaceholder')
         OLD_NEG_LOG_PROB_ACTIONS = tf.placeholder(tf.float32,[None], name='oldNegLogProbActionsPlaceholder')
@@ -86,8 +87,13 @@ class PPOModel(object):
         LEARNING_RATE = tf.placeholder(tf.float32,[], name='LRplaceholder')
         CLIP_RANGE = tf.placeholder(tf.float32,[], name='cliprangePlaceholder')
         
-        neglogpac = network.neglogpac(ACTIONS)
-        entropy = tf.reduce_sum(network.logstd + 0.5*np.log(2*np.pi*np.e), axis=-1)
+        l0 = network.availPi - tf.reduce_max(network.availPi, axis=-1, keep_dims=True)
+        el0 = tf.exp(l0)
+        z0 = tf.reduce_sum(el0, axis=-1, keep_dims=True)
+        p0 = el0 / z0
+        entropy = -tf.reduce_sum((p0+1e-8) * tf.log(p0+1e-8), axis=-1)
+        oneHotActions = tf.one_hot(ACTIONS, network.pi.get_shape().as_list()[-1])
+        neglogpac = -tf.log(tf.reduce_sum(tf.multiply(p0, oneHotActions), axis=-1))
         
         #define loss functions
         #entropy loss
@@ -114,10 +120,10 @@ class PPOModel(object):
         trainer = tf.train.AdamOptimizer(learning_rate=LEARNING_RATE, epsilon=1e-5)
         _train = trainer.apply_gradients(grads)
         
-        def train(lr, cliprange, observations, returns, actions, values, neglogpacs):
+        def train(lr, cliprange, observations, availableActions, returns, actions, values, neglogpacs):
             advs = returns - values
             advs = (advs-advs.mean()) / (advs.std() + 1e-8)
-            inputMap = {network.X: observations, ACTIONS: actions, ADVANTAGES: advs, RETURNS: returns,
+            inputMap = {network.X: observations, network.available_moves: availableActions, ACTIONS: actions, ADVANTAGES: advs, RETURNS: returns,
                         OLD_VAL_PRED: values, OLD_NEG_LOG_PROB_ACTIONS: neglogpacs, LEARNING_RATE: lr, CLIP_RANGE: cliprange}
             return sess.run([pg_loss, vf_loss, entropyLoss, _train], inputMap)[:-1]
         

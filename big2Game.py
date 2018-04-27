@@ -6,11 +6,11 @@ import random
 import math
 from multiprocessing import Process, Pipe
 
-#helper function which calculates distance of chosen action (in continuous space) to an available option.
-def distance(action, option):
-    opt = np.zeros((5,))
-    opt[0:len(option)] = option
-    return np.sum((opt-action)**2)
+def convertAvailableActions(availAcs):
+    #convert from (1,0,0,1,1...) to (0, -math.inf, -math.inf, 0,0...) etc
+    availAcs[np.nonzero(availAcs==0)] = -math.inf
+    availAcs[np.nonzero(availAcs==1)] = 0
+    return availAcs
 
 class handPlayed:
     def __init__(self, hand, player):
@@ -40,11 +40,7 @@ class big2Game:
         self.reset()
         
     def reset(self):
-        #generate a shuffled deck of cards.
-        fullDeck = np.zeros((52,),dtype=int)
-        for i in range(52):
-            fullDeck[i] = i+1
-        shuffledDeck = gameLogic.shuffle(fullDeck)
+        shuffledDeck = np.random.permutation(52) + 1
         #hand out cards to each player
         self.currentHands = {}
         self.currentHands[1] = np.sort(shuffledDeck[0:13])
@@ -426,17 +422,17 @@ class big2Game:
             else:
                 return (fiveCardOptions[ind-n1-n2-n3-n4],5)
             
-    def lookUpNearestOption(self, action):
-        #provide a continuous action (in R^5) and look up the nearest discrete available action
+    def returnAvailableActions(self):
+    
         currHand = self.currentHands[self.playersGo]
+        availableActions = np.zeros((enumerateOptions.nActions[5]+1,))
         
         if self.control == 0:
+            #allow pass action
+            availableActions[enumerateOptions.passInd] = 1
+            
             prevHand = self.handsPlayed[self.goIndex-1].hand
             nCardsToBeat = len(prevHand)
-            
-            bestOption = -1 #pass
-            bestNCards = 0
-            minDistance = distance(action, np.zeros(5,))
             
             if nCardsToBeat > 1:
                 handOptions = gameLogic.handsAvailable(currHand)
@@ -463,34 +459,17 @@ class big2Game:
                 else:
                     options = enumerateOptions.fiveCardOptions(handOptions, prevHand, 3)
                     
-            if isinstance(options, int): #i.e. if there are no options we have to pass.
-                return bestOption, bestNCards
+            if isinstance(options, int): #no options - must pass
+                return availableActions
             
             for option in options:
-                if nCardsToBeat == 1:
-                    optionFull = np.array([option])
-                elif nCardsToBeat == 2:
-                    optionFull = enumerateOptions.inverseTwoCardIndices[option]
-                elif nCardsToBeat == 3:
-                    optionFull = enumerateOptions.inverseThreeCardIndices[option]
-                elif nCardsToBeat == 4:
-                    optionFull = enumerateOptions.inverseFourCardIndices[option]
-                else:
-                    optionFull = enumerateOptions.inverseFiveCardIndices[option]
+                index = enumerateOptions.getIndex(option, nCardsToBeat)
+                availableActions[index] = 1
                 
-                distToChosenAction = distance(action, optionFull)
-                if distToChosenAction < minDistance:
-                    minDistance = distToChosenAction
-                    bestOption = option
-                    bestNCards = nCardsToBeat
-                    
-            return bestOption, bestNCards
-        else:
-            #player has control.
-            minDistance = math.inf #have to choose something
-            bestOption = -1
-            bestNCards = 0
-            
+            return availableActions
+        
+        
+        else: #player has control.
             handOptions = gameLogic.handsAvailable(currHand)
             oneCardOptions = enumerateOptions.oneCardOptions(currHand)
             twoCardOptions = enumerateOptions.twoCardOptions(handOptions)
@@ -499,55 +478,34 @@ class big2Game:
             fiveCardOptions = enumerateOptions.fiveCardOptions(handOptions)
             
             for option in oneCardOptions:
-                optionFull = np.array([option])
-                distToChosenAction = distance(action, optionFull)
-                if distToChosenAction < minDistance:
-                    minDistance = distToChosenAction
-                    bestOption = option
-                    bestNCards = 1
-                    
+                index = enumerateOptions.getIndex(option, 1)
+                availableActions[index] = 1
+                
             if not isinstance(twoCardOptions, int):
                 for option in twoCardOptions:
-                    optionFull = enumerateOptions.inverseTwoCardIndices[option]
-                    distToChosenAction = distance(action, optionFull)
-                    if distToChosenAction < minDistance:
-                        minDistance = distToChosenAction
-                        bestOption = option
-                        bestNCards = 2
-                        
+                    index = enumerateOptions.getIndex(option, 2)
+                    availableActions[index] = 1
+                    
             if not isinstance(threeCardOptions, int):
                 for option in threeCardOptions:
-                    optionFull = enumerateOptions.inverseThreeCardIndices[option]
-                    distToChosenAction = distance(action, optionFull)
-                    if distToChosenAction < minDistance:
-                        minDistance = distToChosenAction
-                        bestOption = option
-                        bestNCards = 3
-                        
+                    index = enumerateOptions.getIndex(option, 3)
+                    availableActions[index] = 1
+                    
             if not isinstance(fourCardOptions, int):
                 for option in fourCardOptions:
-                    optionFull = enumerateOptions.inverseFourCardIndices[option]
-                    distToChosenAction = distance(action, optionFull)
-                    if distToChosenAction < minDistance:
-                        minDistance = distToChosenAction
-                        bestOption = option
-                        bestNCards = 4
-                        
+                    index = enumerateOptions.getIndex(option, 4)
+                    availableActions[index] = 1
+                    
             if not isinstance(fiveCardOptions, int):
                 for option in fiveCardOptions:
-                    optionFull = enumerateOptions.inverseFiveCardIndices[option]
-                    distToChosenAction = distance(action, optionFull)
-                    if distToChosenAction < minDistance:
-                        minDistance = distToChosenAction
-                        bestOption = option
-                        bestNCards = 5
-                        
-                        
-            return bestOption, bestNCards
-        
+                    index = enumerateOptions.getIndex(option, 5)
+                    availableActions[index] = 1
+                    
+            return availableActions
+
     def step(self, action):
-        bestOp, nC = self.lookUpNearestOption(action)
-        self.updateGame(bestOp, nC)
+        opt, nC = enumerateOptions.getOptionNC(action)
+        self.updateGame(opt, nC)
         if self.gameOver == 0:
             reward = 0
             done = False
@@ -557,12 +515,13 @@ class big2Game:
             done = True
             info = {}
             info['numTurns'] = self.goCounter
+            info['rewards'] = self.rewards
             #what else is worth monitoring?            
             self.reset()
         return reward, done, info
     
     def getCurrentState(self):
-        return self.playersGo, self.neuralNetworkInputs[self.playersGo].reshape(1,412)
+        return self.playersGo, self.neuralNetworkInputs[self.playersGo].reshape(1,412), convertAvailableActions(self.returnAvailableActions()).reshape(1,1695)
         
         
         
@@ -577,11 +536,11 @@ def worker(remote, parent_remote):
             remote.send((reward, done, info))
         elif cmd == 'reset':
             game.reset()
-            pGo, cState = game.getCurrentState()
+            pGo, cState, availAcs = game.getCurrentState()
             remote.send((pGo,cState))
         elif cmd == 'getCurrState':
-            pGo, cState = game.getCurrentState()
-            remote.send((pGo, cState))
+            pGo, cState, availAcs = game.getCurrentState()
+            remote.send((pGo, cState, availAcs))
         elif cmd == 'close':
             remote.close()
             break
@@ -627,8 +586,8 @@ class vectorizedBig2Games(object):
     def currStates_wait(self):
         results = [remote.recv() for remote in self.remotes]
         self.waiting = False
-        pGos, currStates= zip(*results)
-        return np.stack(pGos), np.stack(currStates)
+        pGos, currStates, currAvailAcs = zip(*results)
+        return np.stack(pGos), np.stack(currStates), np.stack(currAvailAcs)
     
     def getCurrStates(self):
         self.currStates_async()

@@ -4,8 +4,34 @@ import numpy as np
 import gameLogic
 
 nActions = np.array([13,33,31,330,1287,1694])
+nAcSum = np.cumsum(nActions[:-1])
+
 with open('actionIndices.pkl','rb') as f:  # Python 3: open(..., 'rb')
     twoCardIndices, threeCardIndices, fourCardIndices, fiveCardIndices, inverseTwoCardIndices, inverseThreeCardIndices, inverseFourCardIndices, inverseFiveCardIndices = pickle.load(f)
+
+passInd = nActions[-1]
+
+def getIndex(option, nCards):
+    if nCards==0: #pass
+        return passInd
+    sInd = 0
+    for i in range(nCards-1):
+        sInd += nActions[i]
+    return sInd + option
+
+def getOptionNC(ind):
+    if ind == passInd:
+        return -1, 0
+    if ind < nAcSum[0]:
+        return ind, 1
+    elif ind < nAcSum[1]:
+        return ind - nAcSum[0], 2
+    elif ind < nAcSum[2]:
+        return ind - nAcSum[1], 3
+    elif ind < nAcSum[3]:
+        return ind - nAcSum[2], 4
+    else:
+        return ind - nAcSum[3], 5
 
 def fiveCardOptions(handOptions, prevHand=[],prevType=0):
     #prevType = 0 - no hand, you have control and can play any 5 card
