@@ -42,10 +42,11 @@ class PPONetwork(object):
         def value(obs, availAcs):
             return sess.run(vf, {X:obs, available_moves:availAcs})
         
+        self.availPi = availPi
+        self.neglogpac = neglogpac
         self.X = X
         self.available_moves = available_moves
         self.pi = pi
-        self.availPi = availPi
         self.vf = vf        
         self.step = step
         self.value = value
@@ -94,6 +95,11 @@ class PPOModel(object):
         entropy = -tf.reduce_sum((p0+1e-8) * tf.log(p0+1e-8), axis=-1)
         oneHotActions = tf.one_hot(ACTIONS, network.pi.get_shape().as_list()[-1])
         neglogpac = -tf.log(tf.reduce_sum(tf.multiply(p0, oneHotActions), axis=-1))
+        
+        def neglogp(state, actions, index):
+            return sess.run(neglogpac, {network.X: state, network.available_moves: actions, ACTIONS: index})
+        
+        self.neglogp = neglogp
         
         #define loss functions
         #entropy loss
