@@ -5,4 +5,4 @@ If you run generateGUI.py you can play with the AI and also see the values it as
 
 <a href="https://big2-ai.herokuapp.com/game/"><img src="https://henrycharlesworth.com/fileStorage/big2aiscreenshot.png" /></a>
 
-Read more about the details of what I actually did to train the network <a href="https://www.henrycharlesworth.com/blog">here</a>!
+I wrote up the details of how I trained the network and added it to arXiv <a href="https://arxiv.org/abs/1808.10442">here!</a>
