@@ -169,6 +169,8 @@ class big2PPOSimulation(object):
             
             nTrainingBatch = batchSize // self.nMiniBatches
             
+            currParams = self.trainingNetwork.getParams()
+            
             mb_lossvals = []
             inds = np.arange(batchSize)
             for _ in range(self.nOptEpochs):
@@ -179,6 +181,15 @@ class big2PPOSimulation(object):
                     mb_lossvals.append(self.trainingModel.train(lrnow, cliprangenow, states[mb_inds], availAcs[mb_inds], returns[mb_inds], actions[mb_inds], values[mb_inds], neglogpacs[mb_inds]))
             lossvals = np.mean(mb_lossvals, axis=0)
             self.losses.append(lossvals)
+            
+            newParams = self.trainingNetwork.getParams()
+            needToReset = 0
+            for param in newParams:
+                if np.sum(np.isnan(param)) > 0:
+                    needToReset = 1
+                    
+            if needToReset == 1:
+                self.trainingNetwork.loadParams(currParams)
             
             if update % self.saveEvery == 0:
                 name = "modelParameters" + str(update)
@@ -191,9 +202,9 @@ if __name__ == "__main__":
     import time
     
     with tf.Session() as sess:
-        mainSim = big2PPOSimulation(sess, nGames=48, nSteps=20, learningRate = 0.00025, clipRange = 0.2)
+        mainSim = big2PPOSimulation(sess, nGames=64, nSteps=20, learningRate = 0.00025, clipRange = 0.2)
         start = time.time()
-        mainSim.train(150000000)
+        mainSim.train(1000000000)
         end = time.time()
         print("Time Taken: %f" % (end-start))
         
