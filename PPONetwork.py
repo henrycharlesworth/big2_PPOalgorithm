@@ -6,7 +6,6 @@ import joblib
 class PPONetwork(object):
     
     def __init__(self, sess, obs_dim, act_dim, name):
-        #action is continuous in R^act_dim.
         self.obs_dim = obs_dim
         self.act_dim = act_dim
         self.name = name
