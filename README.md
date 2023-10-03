@@ -8,7 +8,7 @@ If you run generateGUI.py you can play with the AI and also see the values it as
 I wrote up the details of how I trained the network and added it to arXiv <a href="https://arxiv.org/abs/1808.10442">here!</a>
 
 ## Update (October 2023)
-Apologies, the Heroku app was down for a long time (lots of emails sent to an old account warning me, but I missed them). I have deployed a new app <a href="https://big2-rl-4ba753215e7b.herokuapp.com/">here.</a>
+Apologies, the Heroku app was down for a long time (lots of emails sent to an old account warning me, but I missed them). I have deployed a new app <a href="https://big2-rl-4ba753215e7b.herokuapp.com/game">here.</a>
 
 Also as I may not keep that app running indefinitely, I have released the code so that you can run the game locally and play against the trained agents <a href="https://github.com/henrycharlesworth/big2_server/">here.</a>
 
